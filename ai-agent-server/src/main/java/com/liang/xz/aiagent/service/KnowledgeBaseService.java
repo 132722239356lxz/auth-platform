@@ -10,10 +10,13 @@ import com.liang.xz.aiagent.entity.KnowledgeDoc;
 import com.liang.xz.aiagent.entity.UploadTask;
 import com.liang.xz.aiagent.rag.RetrievalPipeline;
 import com.liang.xz.aiagent.rag.TextSplitter;
+import com.liang.xz.aiagent.repository.DocumentElementRepository;
 import com.liang.xz.aiagent.repository.KnowledgeBaseRepository;
 import com.liang.xz.aiagent.repository.KnowledgeDocRepository;
 import com.liang.xz.aiagent.repository.UploadTaskRepository;
 import com.liang.xz.aiagent.search.LocalSearchEngine;
+import com.liang.xz.aiagent.service.document.DocumentAnalysisService;
+import com.liang.xz.aiagent.service.document.model.DocumentAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -55,6 +58,8 @@ public class KnowledgeBaseService {
     private final NamedParameterJdbcTemplate jdbc;
     private final Executor embeddingIndexExecutor;
     private final AiProperties aiProperties;
+    private final DocumentAnalysisService documentAnalysisService;
+    private final DocumentElementRepository documentElementRepository;
 
     /**
      * 并发索引信号量：限制同时进行的异步文档索引任务数，
@@ -71,7 +76,9 @@ public class KnowledgeBaseService {
                                 LocalSearchEngine localSearchEngine,
                                 NamedParameterJdbcTemplate jdbc,
                                 @Qualifier("embeddingIndexExecutor") Executor embeddingIndexExecutor,
-                                AiProperties aiProperties) {
+                                AiProperties aiProperties,
+                                DocumentAnalysisService documentAnalysisService,
+                                DocumentElementRepository documentElementRepository) {
         this.docRepository = docRepository;
         this.kbRepository = kbRepository;
         this.uploadTaskRepository = uploadTaskRepository;
@@ -82,6 +89,8 @@ public class KnowledgeBaseService {
         this.jdbc = jdbc;
         this.embeddingIndexExecutor = embeddingIndexExecutor;
         this.aiProperties = aiProperties;
+        this.documentAnalysisService = documentAnalysisService;
+        this.documentElementRepository = documentElementRepository;
     }
 
     // ==================== 知识库 CRUD ====================
@@ -372,7 +381,28 @@ public class KnowledgeBaseService {
         uploadTaskRepository.updateProgress(taskId, 30, "PARSING");
 
         // 5. 解析文件内容
+        //    PDF/Word 优先走深度分析：识别图片、表格结构、扫描页与页眉页脚，
+        //    失败或未启用时自动回退到 Tika 纯文本抽取，保证上传流程不中断。
         FileParserService.ParseResult parseResult = fileParserService.parse(fileData, originalFileName);
+        if (documentAnalysisService != null && documentAnalysisService.supports(originalFileName)
+                && parseResult.getError() == null) {
+            try {
+                DocumentAnalysisResult analysis =
+                        documentAnalysisService.analyze(fileData, originalFileName);
+                if (analysis != null && analysis.getBodyText() != null
+                        && !analysis.getBodyText().isBlank()) {
+                    // 用深度分析产出的正文替换纯文本：已排除页眉页脚噪声，
+                    // 并包含图片描述与表格 Markdown，信息量显著高于 Tika 输出
+                    parseResult.setText(analysis.getBodyText());
+                    parseResult.setTextLength(analysis.getBodyText().length());
+                    parseResult.setDocumentAnalysis(analysis);
+                    log.info("[KnowledgeBase] 已采用深度分析结果: {}", analysis.toSummary());
+                }
+            } catch (Exception e) {
+                // 深度分析失败不影响主流程，继续使用 Tika 的纯文本结果
+                log.warn("[KnowledgeBase] 深度分析失败，回退纯文本: {} - {}", originalFileName, e.getMessage());
+            }
+        }
         if (parseResult.getError() != null) {
             uploadTaskRepository.markFailed(taskId, parseResult.getError());
             return UploadResult.builder()
@@ -457,6 +487,33 @@ public class KnowledgeBaseService {
     }
 
     /**
+     * 落库文档元素元数据。
+     *
+     * <p>元素元数据是增强信息而非核心内容，写库失败只记录告警，
+     * 不影响已完成的索引结果——文档依然可被正常检索。</p>
+     *
+     * @param docId   文档ID
+     * @param analysis 深度分析结果（纯文本抽取时为 null，直接跳过）
+     */
+    private void persistDocumentElements(Long docId, DocumentAnalysisResult analysis) {
+        if (docId == null || analysis == null || documentElementRepository == null) {
+            return;
+        }
+        if (!aiProperties.getDocumentAnalysis().isPersistElements()) {
+            log.debug("[KnowledgeBase] 元素元数据落库已关闭，跳过: docId={}", docId);
+            return;
+        }
+        try {
+            int saved = documentElementRepository.saveElements(docId, analysis);
+            log.info("[KnowledgeBase] 元素元数据落库完成: docId={}, 元素数={}/{}",
+                    docId, saved, analysis.getElements() == null ? 0 : analysis.getElements().size());
+        } catch (Exception e) {
+            log.warn("[KnowledgeBase] 元素元数据落库失败(不影响检索): docId={}, reason={}",
+                    docId, e.getMessage());
+        }
+    }
+
+    /**
      * 异步索引文档（受信号量限流）
      */
     private void asyncIndexDocument(String taskId, KnowledgeDoc doc, FileParserService.ParseResult parseResult,
@@ -473,6 +530,10 @@ public class KnowledgeBaseService {
 
             // 同步到 Lucene
             syncToLucene(String.valueOf(doc.getId()), doc.getTitle(), parseResult.getText(), doc.getKbName());
+
+            // 落库文档元素元数据（图片/表格/扫描页/页眉页脚的类型、页码、位置、置信度）。
+            // 放在分块之后：此时 doc.getId() 已确定，可与分块结果关联。
+            persistDocumentElements(doc.getId(), parseResult.getDocumentAnalysis());
 
             log.info("[KnowledgeBase] 异步入库成功: docId={}, chunks={}", doc.getId(), chunkCount);
         } catch (Exception e) {

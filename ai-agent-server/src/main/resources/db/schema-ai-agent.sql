@@ -115,6 +115,33 @@ CREATE TABLE IF NOT EXISTS ai_chat_message (
     INDEX idx_create_time (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话消息';
 
+-- 文档元素元数据(记录PDF/Word深度分析出的各类元素: 图片/表格/扫描页/页眉页脚等)
+-- 说明: 与 ai_knowledge_chunk 的区别 ——
+--   ai_knowledge_chunk 存的是"分块后的文本", 面向向量检索;
+--   本表存的是"原始文档的结构化元素", 面向结构还原与可信度追溯。
+--   二者通过 doc_id 关联, 可从检索命中的 chunk 反查其来源元素的类型、位置与置信度。
+CREATE TABLE IF NOT EXISTS ai_document_element (
+    id                BIGINT AUTO_INCREMENT PRIMARY KEY,
+    doc_id            BIGINT        COMMENT '关联文档ID(ai_knowledge_doc.id)',
+    order_index       INT           DEFAULT 0 COMMENT '元素序号(按阅读顺序)',
+    element_type      VARCHAR(30)   NOT NULL COMMENT '元素类型: TEXT/HEADING/TABLE/IMAGE/CHART/SCANNED_PAGE/HEADER/FOOTER/FOOTNOTE/ANNOTATION/WATERMARK/UNKNOWN',
+    page_no           INT           DEFAULT 0 COMMENT '页码(从1开始, Word无分页信息时为0)',
+    bbox_x0           FLOAT         COMMENT '归一化坐标: 左上X(0~1)',
+    bbox_y0           FLOAT         COMMENT '归一化坐标: 左上Y(0~1)',
+    bbox_x1           FLOAT         COMMENT '归一化坐标: 右下X(0~1)',
+    bbox_y1           FLOAT         COMMENT '归一化坐标: 右下Y(0~1)',
+    processing_method VARCHAR(30)   NOT NULL COMMENT '处理方式: DIRECT_EXTRACT/VISION_MODEL/TABLE_STRUCTURED/MODEL_ENHANCED/RULE_INFERRED/SKIPPED',
+    confidence        DOUBLE        DEFAULT 1.0 COMMENT '置信度(0~1)',
+    content           LONGTEXT      COMMENT '元素内容(表格为Markdown; 图片为视觉描述)',
+    table_rows        INT           DEFAULT 0 COMMENT '表格行数(非表格元素为0)',
+    table_columns     INT           DEFAULT 0 COMMENT '表格列数(非表格元素为0)',
+    remark            VARCHAR(500)  COMMENT '备注(图片尺寸/合并单元格/降级原因等)',
+    create_time       DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_doc_id (doc_id),
+    INDEX idx_element_type (element_type),
+    INDEX idx_doc_type (doc_id, element_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档元素元数据(PDF/Word深度分析)';
+
 -- 多Agent编排-子任务调用日志(记录每个子Agent的调用明细, 用于编排链路排障与Agent质量分析)
 -- 说明: 与 sys_ai_invoke_log 的区别 ——
 --   sys_ai_invoke_log 是系统级 LLM 调用日志, 面向 token 消耗与供应商质量统计;

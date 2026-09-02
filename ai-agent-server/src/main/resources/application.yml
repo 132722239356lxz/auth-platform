@@ -160,6 +160,22 @@ ai-agent:
   orchestration:
     enabled: true
 
+  # ---- 文档深度分析（PDF/Word）----
+  # 关闭后回退到 Tika 纯文本抽取（不识别图片/表格结构/页眉页脚）。
+  document-analysis:
+    enabled: true
+    # 是否调用视觉模型识别嵌入图片与扫描件页面。
+    # 注意：一份 50 页的扫描件 PDF 会触发 50 次视觉调用，成本较高，
+    # 生产环境请结合 max-images-per-document / max-scanned-pages-per-document 控制。
+    vision-enabled: true
+    # 单文档图片处理上限，超出部分跳过（避免大文档产生失控调用成本）
+    max-images-per-document: 20
+    max-scanned-pages-per-document: 30
+    # 元素元数据是否落库（ai_document_element 表）
+    persist-elements: true
+    # 分析超时（秒），超时后回退纯文本抽取，避免拖垮上传流程
+    timeout-seconds: 300
+
   # ==================== 文件上传配置 ====================
   file-upload:
     max-file-size: 50MB

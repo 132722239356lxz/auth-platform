@@ -5,6 +5,7 @@ import com.liang.xz.aiagent.entity.KnowledgeBase;
 import com.liang.xz.aiagent.entity.KnowledgeDoc;
 import com.liang.xz.aiagent.rag.TextSplitter;
 import com.liang.xz.aiagent.config.AiProperties;
+import com.liang.xz.aiagent.repository.DocumentElementRepository;
 import com.liang.xz.aiagent.service.FileParserService;
 import com.liang.xz.aiagent.service.KnowledgeBaseService;
 import com.liang.xz.common.core.model.R;
@@ -37,12 +38,15 @@ public class KnowledgeBaseController {
     private final KnowledgeBaseService kbService;
     private final FileParserService fileParserService;
     private final AiProperties aiProperties;
+    private final DocumentElementRepository documentElementRepository;
 
     public KnowledgeBaseController(KnowledgeBaseService kbService, FileParserService fileParserService,
-                                   AiProperties aiProperties) {
+                                   AiProperties aiProperties,
+                                   DocumentElementRepository documentElementRepository) {
         this.kbService = kbService;
         this.fileParserService = fileParserService;
         this.aiProperties = aiProperties;
+        this.documentElementRepository = documentElementRepository;
     }
 
     // ==================== 知识库 CRUD ====================
@@ -212,6 +216,50 @@ public class KnowledgeBaseController {
     public R<KnowledgeDocDetailVO> getDocumentChunks(@PathVariable Long id) {
         KnowledgeDocDetailVO detail = kbService.getDocumentDetail(id);
         return detail == null ? R.fail("文档不存在") : R.ok(detail);
+    }
+
+    // ==================== 文档元素元数据（深度分析产物） ====================
+
+    @Operation(summary = "获取文档元素元数据",
+            description = "返回PDF/Word深度分析识别出的元素：表格、图片、图表、扫描页、页眉页脚等，"
+                    + "含页码、位置坐标、处理方式与置信度，用于确认文档解析质量")
+    @GetMapping("/doc/{id}/elements")
+    public R<List<Map<String, Object>>> getDocumentElements(
+            @PathVariable Long id,
+            @RequestParam(required = false) String type) {
+        List<Map<String, Object>> elements = documentElementRepository.findByDocId(id);
+        // 按类型过滤：便于前端只查看表格或只查看图片
+        if (type != null && !type.isBlank()) {
+            String wanted = type.trim().toUpperCase();
+            elements = elements.stream()
+                    .filter(row -> wanted.equals(String.valueOf(row.get("element_type")))
+                            || ("IMAGE".equals(wanted)
+                                && "CHART".equals(String.valueOf(row.get("element_type")))))
+                    .toList();
+        }
+        return R.ok(elements);
+    }
+
+    @Operation(summary = "获取文档元素统计",
+            description = "按元素类型与处理方式汇总，快速判断文档构成（如扫描件占比、表格数量）")
+    @GetMapping("/doc/{id}/elements/stat")
+    public R<Map<String, Object>> getDocumentElementStat(@PathVariable Long id) {
+        List<Map<String, Object>> elements = documentElementRepository.findByDocId(id);
+        Map<String, Object> stat = new java.util.LinkedHashMap<>();
+        stat.put("docId", id);
+        stat.put("totalElements", elements.size());
+
+        Map<String, Integer> byType = new java.util.LinkedHashMap<>();
+        Map<String, Integer> byMethod = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> row : elements) {
+            String elementType = String.valueOf(row.get("element_type"));
+            String method = String.valueOf(row.get("processing_method"));
+            byType.merge(elementType, 1, Integer::sum);
+            byMethod.merge(method, 1, Integer::sum);
+        }
+        stat.put("byType", byType);
+        stat.put("byProcessingMethod", byMethod);
+        return R.ok(stat);
     }
 
     private TextSplitter.SplitStrategy parseStrategy(String splitterType, String contentType) {

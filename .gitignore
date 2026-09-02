@@ -63,5 +63,9 @@ build/
 logs/
 *.log
 
+### 依赖分析等临时产物 ###
+*-deps.txt
+dependency-check-report.*
+
 ### 安全扫描产物 ###
 dependency-check-report.*

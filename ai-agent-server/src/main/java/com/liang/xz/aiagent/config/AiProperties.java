@@ -66,6 +66,10 @@ public class AiProperties {
     /** 多Agent编排配置 */
     private OrchestrationConfig orchestration = new OrchestrationConfig();
 
+    /** 文档深度分析配置（PDF/Word 的元素识别、表格还原、图片与扫描件视觉识别） */
+    private com.liang.xz.aiagent.service.document.model.DocumentAnalysisProperties documentAnalysis =
+            new com.liang.xz.aiagent.service.document.model.DocumentAnalysisProperties();
+
     /** 复杂度路由配置 */
     private ComplexityRoutingConfig complexityRouting = new ComplexityRoutingConfig();
 

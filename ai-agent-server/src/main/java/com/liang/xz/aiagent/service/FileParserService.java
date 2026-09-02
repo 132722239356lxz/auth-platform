@@ -55,6 +55,13 @@ public class FileParserService {
         private long parseTimeMs;
         private int textLength;
         private String error;
+
+        /**
+         * PDF/Word 深度分析结果（含元素元数据）。
+         * <p>仅当文件走了深度分析路径时非空；纯文本抽取或不支持的格式为 null。
+         * 该字段随 ParseResult 一并传递给索引流程，用于在文档落库后写入元素元数据。</p>
+         */
+        private com.liang.xz.aiagent.service.document.model.DocumentAnalysisResult documentAnalysis;
     }
 
     /**
