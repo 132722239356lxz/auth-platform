@@ -1,0 +1,40 @@
+server:
+  port: 10909
+
+spring:
+  application:
+    name: knife4j-aggregation
+
+# ======================== Knife4j 聚合配置 ========================
+# 通过 springdoc.swagger-ui.urls 聚合各服务的 OpenAPI 文档
+# 浏览器端直接向 Gateway 发起请求获取各服务 /v3/api-docs
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    urls-primary-name: 系统管理服务
+    urls:
+      - name: 授权服务
+        url: http://@gateway.host@:@gateway.port@/auth-server/v3/api-docs?group=客户端管理
+      - name: 审批流服务
+        url: http://@gateway.host@:@gateway.port@/auth-flow/v3/api-docs?group=审批流程
+      - name: 消息服务
+        url: http://@gateway.host@:@gateway.port@/auth-message/v3/api-docs?group=消息管理
+      - name: AI智能体
+        url: http://@gateway.host@:@gateway.port@/ai-agent-server/v3/api-docs?group=智能对话
+      - name: 系统管理服务
+        url: http://@gateway.host@:@gateway.port@/system-server/v3/api-docs?group=用户管理
+      - name: 日志服务
+        url: http://@gateway.host@:@gateway.port@/log-server/v3/api-docs?group=日志收集
+
+knife4j:
+  enable: true
+  setting:
+    language: zh-CN
+    enable-search: true
+    enable-footer-custom: true
+    footer-custom-content: Apache License 2.0 | Copyright © 2024 auth-platform
+
+logging:
+  level:
+    com.liang: DEBUG

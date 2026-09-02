@@ -1,0 +1,71 @@
+{
+  "mcpServers": {
+    "fs-mcp": {
+      "type": "stdio",
+      "command": "mcp-server-filesystem",
+      "args": ["d:\\study\\auth-platform"],
+      "description": "文件系统操作：读/写/搜索工作目录内的文件，禁止跨盘访问系统敏感目录"
+    },
+    "lint-mcp": {
+      "type": "stdio",
+      "command": "pare-lint",
+      "args": [],
+      "description": "代码规范校验：ESLint、Prettier、Biome 结构化诊断，生成代码前自动校验"
+    },
+    "git-mcp": {
+      "type": "stdio",
+      "command": "git-mcp-server",
+      "args": [],
+      "description": "Git 版本控制：diff/log/status/branch/commit 等全部 Git 操作，修改代码前必用 diff 查看原有逻辑"
+    },
+    "build-mcp": {
+      "type": "stdio",
+      "command": "pare-jvm",
+      "args": ["--project-root", "d:\\study\\auth-platform"],
+      "description": "JVM 构建（Maven/Gradle）：编译、测试、依赖管理，涉及编译/打包必须调用"
+    },
+    "shell-mcp": {
+      "type": "stdio",
+      "command": "shell-mcp-lite",
+      "args": [],
+      "description": "持久化 Shell 会话：命令执行、启动/停止服务、脚本运行，屏蔽 rm -rf / / chmod 777 / / sudo -i / curl | bash"
+    },
+    "database-mcp": {
+      "type": "stdio",
+      "command": "mcp-server-mysql",
+      "args": [],
+      "env": {
+        "MYSQL_HOST": "127.0.0.1",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "root",
+        "MYSQL_PASSWORD": "1457902738lxz",
+        "MYSQL_DATABASE": "auth_platform"
+      },
+      "description": "MySQL 数据库操作与执行计划校验：禁止 drop 全库、无条件 delete 全表"
+    },
+    "docker-mcp": {
+      "type": "stdio",
+      "command": "pare-docker",
+      "args": [],
+      "description": "Docker 容器管理：容器/镜像/Compose 生命周期管理"
+    },
+    "code-search-mcp": {
+      "type": "stdio",
+      "command": "pare-search",
+      "args": ["--root", "d:\\study\\auth-platform"],
+      "description": "代码搜索：ripgrep/fd/jq 结构化搜索，语义级代码查找"
+    },
+    "test-mcp": {
+      "type": "stdio",
+      "command": "junit-mcp-server",
+      "args": [],
+      "description": "JUnit 测试生成（Java）：自动生成单元测试代码，分析测试报告"
+    },
+    "doc-mcp": {
+      "type": "stdio",
+      "command": "api-doc-generator",
+      "args": [],
+      "description": "API 文档生成：OpenAPI 3.1/Swagger 规范，接口文档与测试套件输出"
+    }
+  }
+}

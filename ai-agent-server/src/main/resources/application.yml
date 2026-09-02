@@ -1,0 +1,202 @@
+server:
+  port: 9003
+
+spring:
+  application:
+    name: ai-agent-server
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yml
+      - optional:nacos:redis.yml
+      - optional:nacos:auth-security.yml
+      - optional:nacos:datasource.yml
+      - optional:nacos:common-config.yml
+      - optional:nacos:resource-server.yml
+  cloud:
+    # Nacos 引导 (Spring Cloud 2023.x 默认为 false，需显式开启)
+    bootstrap:
+      enabled: true
+    nacos:
+      discovery:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        register-enabled: true
+        username: ${NACOS_USERNAME:@nacos.username@}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        file-extension: yml
+        refresh-enabled: true
+        username: ${NACOS_USERNAME:@nacos.username@}
+        password: ${NACOS_PASSWORD:nacos}
+  sql:
+    init:
+      mode: never  # 首次部署改为 always 执行建表SQL，之后改为 never 避免重复执行
+
+
+
+
+# ======================== Knife4j API文档 ========================
+# 安全提示：生产环境需通过 API_DOCS_ENABLED=false 关闭，避免接口签名泄露
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+  group-configs:
+    - group: '智能对话'
+      paths-to-match: /api/ai/chat/**
+    - group: '智能分析'
+      paths-to-match: /api/ai/analysis/**
+    - group: '智能搜索'
+      paths-to-match: /api/ai/search/**
+    - group: '知识库管理'
+      paths-to-match: /api/ai/knowledge/**
+    - group: '健康检查'
+      paths-to-match: /api/ai/health/**
+
+knife4j:
+  enable: ${API_DOCS_ENABLED:true}
+  setting:
+    language: zh-CN
+    enable-search: true
+# ======================== AI 智能体配置 ========================
+ai-agent:
+
+  # ---- 向量存储 ----
+  vector:
+    type: MEMORY
+    top-k: 5
+    similarity-threshold: 0.5
+    milvus:
+      host: localhost
+      port: 19530
+      collection-name: ai_knowledge_vectors
+      index-type: IVF_FLAT
+      metric-type: COSINE
+
+  # ---- 检索阶段 ----
+  search:
+    # 宽召回倍数：向量检索先召回 top-k * retrieve-top-k 个候选，再经重排序精排取最终 top-k
+    retrieve-top-k: 3
+
+  # ---- 重排序模型（RAG 精排） ----
+  rerank:
+    enabled: true
+    url: http://127.0.0.1:8000/rerank
+    model: bge-reranker-base
+    connect-timeout: 10
+    read-timeout: 30
+    max-candidates: 50
+
+  # ---- 本地搜索引擎 ----
+  local-search:
+    index-path: ./data/lucene-index
+    max-results: 20
+    fragment-size: 200
+    chinese-analyzer: false
+
+  # ---- 联网搜索 ----
+  web-search:
+    # 默认使用 Searchpin（自托管、免 API Key、支持中文多引擎）；可选 BRAVE / SERPAPI / BING
+    provider: SEARCHPIN
+    api-key: ${WEB_SEARCH_API_KEY:}
+    max-results: 10
+    timeout: 30
+    # Searchpin（MCP stdio 联网搜索）配置
+    searchpin-enabled: true
+    # 启动命令：Java 子进程不继承 shell 的 PATH，建议用绝对路径避免“系统找不到指定的文件”。
+    # 先确认 searchpin-server.exe 实际位置（通常在 Python 安装目录的 Scripts 下）：
+    #   C:\Users\liangxuanze\AppData\Local\Programs\Python\Python314\Scripts\searchpin-server.exe
+    # 也可用 "python -m" 形式（需 python 在 PATH）：
+    #   C:\Users\liangxuanze\AppData\Local\Programs\Python\Python314\python.exe -m searchpin.server
+    searchpin-command: C:\Users\liangxuanze\AppData\Local\Programs\Python\Python314\Scripts\searchpin-server.exe
+    searchpin-max-results: 10
+    # 整体超时（秒）：首次运行需经镜像下载 ~118MB 重排模型，适当放宽
+    searchpin-timeout: 120
+
+  # ---- 分析预警 ----
+  analysis:
+    enabled: true
+    cron: "0 0/30 * * * ?"
+    default-window-days: 7
+    alert-channel: IN_APP
+
+  # ---- 模型路由 ----
+  model-routing:
+    enabled: false
+
+  # ---- 响应缓存 ----l
+    max-size: 500
+    ttl-minutes: 30
+    similarity-threshold: 0.92
+
+  # ---- 会话管理 ----
+  session:
+    max-sessions: 50
+    context-window-size: 10
+    compress-threshold: 20
+    idle-expire-hours: 720
+
+  # ---- 工作流编排 ----
+  workflow:
+    enabled: true
+    max-concurrent-subtasks: 4
+    subtask-timeout-seconds: 60
+    max-retries: 2
+
+  # ---- 多 Agent 编排 ----
+  # 复杂问题交由多个专业 Agent 协作：任务规划 → DAG 分层并发 → 结果汇总。
+  # 关闭后所有问题走原有的单 Agent 工具链路，行为与改造前一致，
+  # 可用于线上快速降级（Nacos 修改后热生效，无需重启）。
+  orchestration:
+    enabled: true
+
+  # ==================== 文件上传配置 ====================
+  file-upload:
+    max-file-size: 50MB
+    # 单次请求最多允许上传的文件数量
+    max-file-count: 20
+    # 单个文件索引（解析+向量化）超时时间（秒），超时则标记该文件任务失败
+    per-file-index-timeout-seconds: 600
+    supported-formats:
+      - pdf
+      - docx
+      - xlsx
+      - txt
+      - md
+      - html
+      - htm
+      - csv
+      - json
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - bmp
+      - webp
+      - svg
+      - mp3
+      - wav
+      - flac
+      - aac
+      - ogg
+      - mp4
+      - avi
+      - mkv
+      - mov
+      - wmv
+
+# 统一日志上报到 log-server
+log:
+  client:
+    enabled: true
+    server-url: http://log-server

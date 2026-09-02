@@ -1,0 +1,85 @@
+server:
+  port: 9000
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        name: AUTH_SESSION
+        path: /
+        http-only: true
+        same-site: lax
+        # 不设 domain，让浏览器自动使用当前 host（兼容 localhost / 127.0.0.1）
+        # 不设 secure=false（开发环境非 HTTPS）
+spring:
+  application:
+    name: auth-server
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yml
+      - optional:nacos:redis.yml
+      - optional:nacos:auth-security.yml
+      - optional:nacos:datasource.yml
+      - optional:nacos:common-config.yml
+      - optional:nacos:resource-server.yml
+  # ======================== 数据源 → 由 Nacos datasource.yml + DynamicDataSource 管理 ========================
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+  # ======================== Nacos 注册中心/配置中心 ========================
+  cloud:
+    nacos:
+      discovery:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        register-enabled: true
+        username: ${NACOS_USERNAME:@nacos.username@}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        file-extension: yml
+        refresh-enabled: true
+        username: ${NACOS_USERNAME:@nacos.username@}
+        password: ${NACOS_PASSWORD:nacos}
+# ======================== 应用配置 ========================
+
+# 统一日志上报到 log-server
+log:
+  client:
+    enabled: true
+    server-url: http://log-server
+
+# OAuth2 门户客户端凭证（服务端持有，不暴露给前端）
+# exchange-code 端点使用此凭证通过网关调用 /oauth2/token
+# 安全提示：密钥通过环境变量 PORTAL_CLIENT_SECRET 于运行期注入，禁止在源码/制品中留存明文。
+app:
+  oauth2:
+    portal-client-id: ${PORTAL_CLIENT_ID:admin-web}
+    portal-client-secret: ${PORTAL_CLIENT_SECRET:changeit-please-set-env}
+    token-endpoint: ${PORTAL_TOKEN_ENDPOINT:http://127.0.0.1:8080/auth-server/oauth2/token}
+
+# 安全提示：API 文档暴露全部接口签名，生产环境需通过 API_DOCS_ENABLED=false 关闭
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+  group-configs:
+    - group: '客户端管理'
+      paths-to-match: /api/clients/**
+    - group: '授权审计'
+      paths-to-match: /api/audit/**
+    - group: 'OAuth2端点'
+      paths-to-match: /oauth2/**
+    - group: '用户信息'
+      paths-to-match: /userinfo,/api/userinfo/**
+    - group: '子系统Token管理'
+      paths-to-match: /api/subsystem/**
+    - group: '请求日志'
+      paths-to-match: /api/logs/**
+    - group: '企业端认证'
+      paths-to-match: /api/enterprise/**
+

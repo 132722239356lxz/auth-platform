@@ -1,0 +1,65 @@
+# =============================================================================
+# Docker 构建上下文排除清单
+# =============================================================================
+# 目的：
+#   1. 大幅缩减构建上下文体积，加速镜像构建与 CI 传输
+#   2. 防止 target/ 中的编译产物、本地配置、日志被意外打进镜像
+#   3. 防止 .git 历史与敏感文件随镜像泄露
+# =============================================================================
+
+# 版本控制
+.git
+.gitignore
+.gitlab-ci.yml
+
+# =============================================================================
+# 注意：target/ 目录不能整体排除 —— 镜像构建需要 COPY 其中的可执行 jar。
+# 因此这里只排除 target 下的中间产物，保留最终 jar。
+# =============================================================================
+**/target/classes/
+**/target/test-classes/
+**/target/generated-sources/
+**/target/generated-test-sources/
+**/target/maven-archiver/
+**/target/maven-status/
+**/target/surefire-reports/
+**/target/failsafe-reports/
+# .jar.original 是 Spring Boot repackage 前的原始 jar，镜像不需要
+**/target/*.jar.original
+
+# 前端依赖与产物（前端单独构建）
+frontend-web/node_modules/
+frontend-app/node_modules/
+node_modules/
+frontend-web/dist/
+frontend-app/dist/
+
+# IDE 与编辑器
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# 日志与临时文件
+logs/
+*.log
+*.log.gz
+tmp/
+
+# 敏感文件（防止误打包）
+*.pem
+*.key
+*.p12
+*.jks
+.env
+.env.*
+!.env.example
+
+# 文档与脚本（不参与运行）
+docs/
+*.md
+CODEBUDDY.md
+
+# 本地数据
+data/

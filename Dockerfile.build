@@ -1,0 +1,89 @@
+# =============================================================================
+# 源码构建镜像 —— 在 Docker 内完成 Maven 构建并产出运行镜像
+# =============================================================================
+# 适用于没有本地 Maven 环境、希望一条命令出镜像的场景（构建较慢）。
+# CI 环境建议改用「Dockerfile + 外部 mvn package」以获得更好的缓存与更快的构建。
+#
+# 用法：
+#   docker build -f Dockerfile.build \
+#     --build-arg MODULE=gateway \
+#     --build-arg APP_PROFILE=dev \
+#     -t registry.example.com/auth-platform/gateway:v1.0.0 .
+#
+# 构建参数：
+#   MODULE      模块目录名（gateway / auth-server / system-server / auth-flow /
+#               auth-message / ai-agent-server / log-server / knife4j-aggregation）
+#   APP_PROFILE Maven Profile & Spring Profile：dev / prod
+#   SERVER_PORT 服务端口
+# =============================================================================
+
+# ==================== 阶段 1：Maven 构建 ====================
+# 使用官方 Maven 镜像（自带 mvn），项目未提供 Maven Wrapper
+FROM maven:3.9-eclipse-temurin-17 AS builder
+
+ARG MODULE=gateway
+ARG APP_PROFILE=dev
+
+WORKDIR /src
+
+# 先只复制 pom.xml（含父 pom），使依赖层可被 Docker 缓存复用
+COPY pom.xml ./
+COPY gateway/pom.xml gateway/
+COPY common-core/pom.xml common-core/
+COPY resource-server-starter/pom.xml resource-server-starter/
+COPY subsystem-sdk/pom.xml subsystem-sdk/
+COPY auth-server/pom.xml auth-server/
+COPY system-server/pom.xml system-server/
+COPY auth-flow/pom.xml auth-flow/
+COPY auth-message/pom.xml auth-message/
+COPY ai-agent-server/pom.xml ai-agent-server/
+COPY log-server/pom.xml log-server/
+COPY knife4j-aggregation/pom.xml knife4j-aggregation/
+
+RUN mvn -B -q dependency:go-offline -DskipTests || true
+
+COPY . .
+
+RUN mvn -B -q clean package -DskipTests -P${APP_PROFILE} -pl ${MODULE} -am \
+    && cp ${MODULE}/target/*.jar /src/app.jar
+
+# ==================== 阶段 2：运行时 ====================
+FROM eclipse-temurin:17-jre-alpine
+
+LABEL maintainer="auth-platform"
+LABEL description="Auth Platform Spring Boot Microservice"
+
+ARG JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+ARG APP_PROFILE=dev
+ARG SERVER_PORT=8080
+
+ENV JAVA_OPTS=${JAVA_OPTS} \
+    SPRING_PROFILES_ACTIVE=${APP_PROFILE} \
+    SERVER_PORT=${SERVER_PORT} \
+    TZ=Asia/Shanghai
+
+RUN apk add --no-cache tzdata wget curl \
+    && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
+    && rm -rf /var/cache/apk/*
+
+# 安全基线：以非 root 用户运行
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+COPY --from=builder /src/app.jar app.jar
+
+RUN chown -R appuser:appgroup /app && chmod 500 /app/app.jar
+
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=90s \
+    CMD wget -qO- "http://127.0.0.1:${SERVER_PORT}/actuator/health" || exit 1
+
+EXPOSE ${SERVER_PORT}
+
+ENTRYPOINT ["sh", "-c", "exec java ${JAVA_OPTS} \
+    -Djava.security.egd=file:/dev/./urandom \
+    -jar /app/app.jar \
+    --spring.profiles.active=${SPRING_PROFILES_ACTIVE}"]

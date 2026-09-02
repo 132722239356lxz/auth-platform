@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.liang.xz.system.mapper.UserMapper">
+
+    <resultMap id="BaseResultMap" type="com.liang.xz.system.entity.UserEntity">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password" property="password"/>
+        <result column="nickname" property="nickname"/>
+        <result column="email" property="email"/>
+        <result column="phone" property="phone"/>
+        <result column="user_type" property="userType"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="dept_id" property="deptId"/>
+        <result column="enabled" property="enabled"/>
+        <result column="account_non_expired" property="accountNonExpired"/>
+        <result column="account_non_locked" property="accountNonLocked"/>
+        <result column="credentials_non_expired" property="credentialsNonExpired"/>
+        <result column="create_time" property="createTime"/>
+        <result column="last_login_time" property="lastLoginTime"/>
+        <result column="last_login_ip" property="lastLoginIp"/>
+        <result column="avatar" property="avatar"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, username, password, nickname, email, phone, user_type, tenant_id,
+        dept_id, enabled, account_non_expired, account_non_locked, credentials_non_expired,
+        create_time, last_login_time, last_login_ip, avatar
+    </sql>
+
+    <select id="findAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM sys_user ORDER BY create_time DESC
+    </select>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM sys_user WHERE id = #{id}
+    </select>
+
+    <select id="findByUsername" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM sys_user WHERE username = #{username}
+    </select>
+
+    <select id="findByQuery" resultMap="BaseResultMap">
+        SELECT u.<include refid="Base_Column_List"/>
+        FROM sys_user u
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
+                OR u.email LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="enabled != null">
+                AND u.enabled = #{enabled}
+            </if>
+            <if test="userType != null and userType != ''">
+                AND u.user_type = #{userType}
+            </if>
+            <if test="deptId != null">
+                AND u.dept_id = #{deptId}
+            </if>
+            <if test="roleId != null">
+                AND u.id IN (SELECT user_id FROM sys_user_role WHERE role_id = #{roleId})
+            </if>
+        </where>
+        ORDER BY u.create_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByQuery" resultType="long">
+        SELECT COUNT(*)
+        FROM sys_user u
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
+                OR u.email LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="enabled != null">
+                AND u.enabled = #{enabled}
+            </if>
+            <if test="userType != null and userType != ''">
+                AND u.user_type = #{userType}
+            </if>
+            <if test="deptId != null">
+                AND u.dept_id = #{deptId}
+            </if>
+            <if test="roleId != null">
+                AND u.id IN (SELECT user_id FROM sys_user_role WHERE role_id = #{roleId})
+            </if>
+        </where>
+    </select>
+
+    <insert id="insert" parameterType="com.liang.xz.system.entity.UserEntity" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_user (username, password, nickname, email, phone, user_type,
+            tenant_id, dept_id, enabled, account_non_expired, account_non_locked,
+            credentials_non_expired, avatar)
+        VALUES (#{username}, #{password}, #{nickname}, #{email}, #{phone}, #{userType},
+            #{tenantId}, #{deptId}, #{enabled}, #{accountNonExpired}, #{accountNonLocked},
+            #{credentialsNonExpired}, #{avatar})
+    </insert>
+
+    <update id="update" parameterType="com.liang.xz.system.entity.UserEntity">
+        UPDATE sys_user
+        SET username = #{username},
+            nickname = #{nickname},
+            email = #{email},
+            phone = #{phone},
+            user_type = #{userType},
+            dept_id = #{deptId},
+            avatar = #{avatar}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updatePassword">
+        UPDATE sys_user SET password = #{password} WHERE id = #{id}
+    </update>
+
+    <update id="updateEnabled">
+        UPDATE sys_user SET enabled = #{enabled} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sys_user WHERE id = #{id}
+    </delete>
+
+</mapper>

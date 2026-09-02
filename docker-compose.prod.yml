@@ -1,0 +1,406 @@
+# =============================================================================
+# auth-platform — 生产环境编排 (prod)
+# =============================================================================
+# 用途：生产部署。与 dev 的关键差异：
+#   1. 只暴露网关端口，MySQL/Redis/RabbitMQ/Nacos 一律不映射到宿主机，仅容器内互通
+#   2. 使用预构建镜像（从镜像仓库拉取），不在生产机上现场编译
+#   3. 关闭 API 文档（API_DOCS_ENABLED=false），避免接口签名泄露
+#   4. 强制设置资源上限，避免单服务拖垮宿主机
+#   5. 全服务 restart: always，保证异常退出后自动拉起
+#
+# 部署：
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+# 回滚：
+#   APP_VERSION=<上一个版本> docker compose -f docker-compose.prod.yml up -d
+#
+# 前提：已执行 cp .env.example .env 并填入生产级凭证
+# =============================================================================
+
+x-common-env: &common-env
+  TZ: Asia/Shanghai
+  NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+  NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+  NACOS_PASSWORD: ${NACOS_PASSWORD:?请在 .env 中设置 NACOS_PASSWORD}
+  SPRING_PROFILES_ACTIVE: prod
+  # 生产环境关闭 API 文档，避免接口签名与参数结构泄露
+  API_DOCS_ENABLED: "false"
+  # 生产环境禁止输出 DEBUG 日志，避免敏感信息落盘
+  LOGGING_LEVEL_ROOT: INFO
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "100m"
+    max-file: "7"
+
+x-resources: &default-resources
+  limits:
+    memory: 1g
+  reservations:
+    memory: 512m
+
+networks:
+  auth-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+
+services:
+  # ==================== 基础设施层（端口不对外暴露） ====================
+
+  mysql:
+    image: mysql:8.0
+    container_name: prod-mysql
+    hostname: mysql
+    networks: [auth-net]
+    # 安全：生产环境不映射 3306 到宿主机，仅容器网络内可达
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=1000
+      - --wait_timeout=600
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { memory: 2g }
+        reservations: { memory: 1g }
+    restart: always
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: prod-redis
+    hostname: redis
+    networks: [auth-net]
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: prod-nacos
+    hostname: nacos
+    networks: [auth-net]
+    expose:
+      - "8848"
+      - "9848"
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:?请在 .env 中设置}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:?请在 .env 中设置}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:?请在 .env 中设置（≥32位随机字符串，切勿使用官方默认值）}
+      # 前置条件：需提前在 MySQL 中创建 nacos 库并导入 Nacos 官方 nacos-mysql.sql，
+      #          否则 Nacos 将因缺少表结构而启动失败（官方镜像不会自动建表）。
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_DB_NAME: nacos
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JVM_XMS: 512m
+      JVM_XMX: 1g
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: prod-rabbitmq
+    hostname: rabbitmq
+    networks: [auth-net]
+    expose:
+      - "5672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?请在 .env 中设置}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?请在 .env 中设置}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  # ==================== 应用服务层（使用预构建镜像） ====================
+
+  gateway:
+    image: ${IMAGE_REGISTRY:?请在 .env 中设置镜像仓库地址}/gateway:${APP_VERSION:?请在 .env 中设置 APP_VERSION}
+    container_name: prod-gateway
+    hostname: gateway
+    networks: [auth-net]
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "8080"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      nacos: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  auth-server:
+    image: ${IMAGE_REGISTRY}/auth-server:${APP_VERSION}
+    container_name: prod-auth-server
+    hostname: auth-server
+    networks: [auth-net]
+    expose:
+      - "9000"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9000"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      PORTAL_CLIENT_ID: ${PORTAL_CLIENT_ID:?请在 .env 中设置}
+      PORTAL_CLIENT_SECRET: ${PORTAL_CLIENT_SECRET:?请在 .env 中设置}
+      PORTAL_TOKEN_ENDPOINT: ${PORTAL_TOKEN_ENDPOINT:-http://gateway:8080/auth-server/oauth2/token}
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9000/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  system-server:
+    image: ${IMAGE_REGISTRY}/system-server:${APP_VERSION}
+    container_name: prod-system-server
+    hostname: system-server
+    networks: [auth-net]
+    expose:
+      - "9001"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9001"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9001/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  auth-flow:
+    image: ${IMAGE_REGISTRY}/auth-flow:${APP_VERSION}
+    container_name: prod-auth-flow
+    hostname: auth-flow
+    networks: [auth-net]
+    expose:
+      - "9011"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9011"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9011/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  auth-message:
+    image: ${IMAGE_REGISTRY}/auth-message:${APP_VERSION}
+    container_name: prod-auth-message
+    hostname: auth-message
+    networks: [auth-net]
+    expose:
+      - "9002"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9002"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  ai-agent-server:
+    image: ${IMAGE_REGISTRY}/ai-agent-server:${APP_VERSION}
+    container_name: prod-ai-agent-server
+    hostname: ai-agent-server
+    networks: [auth-net]
+    expose:
+      - "9003"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9003"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9003/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  log-server:
+    image: ${IMAGE_REGISTRY}/log-server:${APP_VERSION}
+    container_name: prod-log-server
+    hostname: log-server
+    networks: [auth-net]
+    expose:
+      - "9009"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9009"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9009/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources: *default-resources
+    restart: always
+    logging: *default-logging
+
+  # ==================== 前端层（Nginx 托管静态产物） ====================
+
+  frontend-web:
+    image: ${IMAGE_REGISTRY}/frontend-web:${APP_VERSION}
+    container_name: prod-frontend-web
+    hostname: frontend-web
+    networks: [auth-net]
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      gateway: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { memory: 256m }
+        reservations: { memory: 128m }
+    restart: always
+    logging: *default-logging
+
+  # 说明：frontend-app 需先按 UniApp CLI 标准布局调整目录（见 docker-compose.dev.yml 注释）
+  #       才能构建，故默认不启用；目录就绪后追加 --profile mobile 启动。
+  frontend-app:
+    profiles: ["mobile"]
+    image: ${IMAGE_REGISTRY}/frontend-app:${APP_VERSION}
+    container_name: prod-frontend-app
+    hostname: frontend-app
+    networks: [auth-net]
+    ports:
+      - "${APP_PORT:-8081}:80"
+    depends_on:
+      gateway: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { memory: 256m }
+        reservations: { memory: 128m }
+    restart: always
+    logging: *default-logging

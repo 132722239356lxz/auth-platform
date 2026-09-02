@@ -1,0 +1,67 @@
+# ======================== 构建产物 ========================
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# 前端依赖与构建产物（体积巨大且可由 lock 文件重建，严禁提交）
+node_modules/
+dist/
+# UniApp 构建输出
+unpackage/
+dev-dist/
+
+# CI 使用的本地 Maven 仓库（见 .gitlab-ci.yml 的 MAVEN_OPTS）
+.m2/
+
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+### 环境变量与密钥（严禁提交，防止凭证泄露） ###
+.env
+.env.local
+.env.*
+# .env.example 是占位模板，不含真实凭证，需要提交
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+### 本地日志 ###
+logs/
+*.log
+
+### 安全扫描产物 ###
+dependency-check-report.*

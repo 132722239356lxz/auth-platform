@@ -1,0 +1,75 @@
+server:
+  port: 9001
+spring:
+  application:
+    name: system-server
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yml
+      - optional:nacos:resource-server.yml
+      - optional:nacos:redis.yml
+      - optional:nacos:auth-security.yml
+      - optional:nacos:datasource.yml
+      - optional:nacos:common-config.yml
+  # ======================== 数据源 → 由 Nacos datasource.yml + DynamicDataSource 管理 ========================
+  # ======================== Nacos 注册中心/配置中心 ========================
+  cloud:
+    nacos:
+      discovery:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        register-enabled: true
+        username: ${NACOS_USERNAME:@nacos.username@}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        file-extension: yml
+        refresh-enabled: true
+        username: ${NACOS_USERNAME:@nacos.username@}
+        password: ${NACOS_PASSWORD:nacos}
+
+# ======================== Knife4j API文档 ========================
+# 安全提示：生产环境需通过 API_DOCS_ENABLED=false 关闭，避免接口签名泄露
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+  group-configs:
+    - group: '用户管理'
+      paths-to-match: /api/users/**
+    - group: '角色管理'
+      paths-to-match: /api/roles/**
+    - group: '菜单管理'
+      paths-to-match: /api/menus/**
+    - group: '权限管理'
+      paths-to-match: /api/permissions/**
+    - group: '客户端管理'
+      paths-to-match: /api/clients/**
+    - group: '授权审计'
+      paths-to-match: /api/audit/**
+    - group: '子系统Token'
+      paths-to-match: /api/subsystem/**
+    - group: '请求日志'
+      paths-to-match: /api/logs/**
+    - group: '意见反馈'
+      paths-to-match: /api/feedback/**
+    - group: '系统公告'
+      paths-to-match: /api/notices/**
+    - group: '个人中心'
+      paths-to-match: /api/user/profile/**
+    - group: 'AI供应商配置'
+      paths-to-match: /api/ai-providers/**
+    - group: 'AI复杂度路由'
+      paths-to-match: /api/ai-routings/**
+
+
+
+# 统一日志上报到 log-server
+log:
+  client:
+    enabled: true
+    server-url: http://log-server

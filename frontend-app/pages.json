@@ -1,0 +1,86 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": { "navigationBarTitleText": "登录", "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/index/index",
+      "style": { "navigationBarTitleText": "首页" }
+    },
+    {
+      "path": "pages/workflow/list",
+      "style": { "navigationBarTitleText": "审批列表" }
+    },
+    {
+      "path": "pages/workflow/detail",
+      "style": { "navigationBarTitleText": "流程详情" }
+    },
+    {
+      "path": "pages/workflow/create",
+      "style": { "navigationBarTitleText": "发起申请" }
+    },
+    {
+      "path": "pages/message/inbox",
+      "style": { "navigationBarTitleText": "消息列表" }
+    },
+    {
+      "path": "pages/message/detail",
+      "style": { "navigationBarTitleText": "消息详情" }
+    },
+    {
+      "path": "pages/ai/search",
+      "style": { "navigationBarTitleText": "AI搜索" }
+    },
+    {
+      "path": "pages/ai/knowledge",
+      "style": { "navigationBarTitleText": "知识库" }
+    },
+    {
+      "path": "pages/setting/index",
+      "style": { "navigationBarTitleText": "设置" }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "统一授权中台",
+    "navigationBarBackgroundColor": "#409eff",
+    "backgroundColor": "#f5f7fa",
+    "app-plus": {
+      "background": "#f5f7fa"
+    }
+  },
+  "tabBar": {
+    "color": "#909399",
+    "selectedColor": "#409eff",
+    "borderStyle": "white",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/workflow/list",
+        "text": "审批",
+        "iconPath": "static/tab/workflow.png",
+        "selectedIconPath": "static/tab/workflow-active.png"
+      },
+      {
+        "pagePath": "pages/message/inbox",
+        "text": "消息",
+        "iconPath": "static/tab/message.png",
+        "selectedIconPath": "static/tab/message-active.png"
+      },
+      {
+        "pagePath": "pages/setting/index",
+        "text": "我的",
+        "iconPath": "static/tab/mine.png",
+        "selectedIconPath": "static/tab/mine-active.png"
+      }
+    ]
+  },
+  "uniIdRouter": {}
+}

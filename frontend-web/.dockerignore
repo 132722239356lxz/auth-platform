@@ -1,0 +1,23 @@
+# 依赖与构建产物（在镜像内重新生成，避免污染构建上下文）
+node_modules/
+dist/
+dev-dist/
+
+# 版本控制
+.git
+.gitignore
+
+# 日志
+*.log
+dev.log
+frontend-vue-tsc.log
+
+# 环境变量（含敏感配置，构建期通过 CI 变量注入，不随上下文复制）
+.env
+.env.*
+!.env.example
+
+# 编辑器
+.vscode/
+.idea/
+*.iml

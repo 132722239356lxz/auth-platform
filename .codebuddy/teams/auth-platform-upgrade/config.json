@@ -1,0 +1,18 @@
+{
+  "name": "auth-platform-upgrade",
+  "leadAgentId": "f708d6e4d54e41d28c36a33ac4baf6b6",
+  "workspacePath": "d:/study/auth-platform",
+  "createdAt": "2026-06-06T13:59:21.228Z",
+  "options": {
+    "workspacePath": "d:/study/auth-platform",
+    "isAutoTeam": false
+  },
+  "members": [
+    {
+      "memberId": "team-lead@auth-platform-upgrade",
+      "name": "team-lead",
+      "role": "Team Lead - coordinates the team and interacts with the user"
+    }
+  ],
+  "isAutoTeam": false
+}

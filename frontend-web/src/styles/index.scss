@@ -1,0 +1,213 @@
+@use './variables.scss' as *;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  color: $text-primary;
+  background-color: $bg-color;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  text-decoration: none;
+  color: $primary-color;
+}
+
+// 滚动条美化
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #c0c4cc;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// NProgress 颜色
+#nprogress .bar {
+  background: $primary-color !important;
+}
+
+#nprogress .peg {
+  box-shadow: 0 0 10px $primary-color, 0 0 5px $primary-color !important;
+}
+
+// 通用工具类
+.app-container {
+  padding: 20px;
+}
+
+.filter-container {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+// Element Plus 全局样式覆盖
+.el-card {
+  border-radius: 12px !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+.el-card.is-hover-shadow:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+.el-button {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-color: transparent;
+
+  &:hover {
+    background: linear-gradient(135deg, #5a6fd6, #6a4192);
+    border-color: transparent;
+  }
+
+  &:active {
+    background: linear-gradient(135deg, #4e5fc2, #5e3880);
+  }
+}
+
+.el-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  background-color: #fafbfc;
+  color: #4e5969;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.el-dialog {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+// 全局弹窗紧凑布局：顶部距离30%，最大高度70vh，底部按钮始终可见
+.el-dialog__wrapper {
+  overflow: hidden !important;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 30vh;
+}
+
+.el-dialog {
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto 50px !important;
+}
+
+.el-dialog__header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.el-dialog__body {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.el-dialog__footer {
+  padding: 16px 24px 20px;
+  border-top: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.el-form-item__label {
+  font-weight: 500;
+  color: #4e5969;
+}
+
+.el-pagination {
+  font-weight: 500;
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 8px;
+}
+
+.el-select .el-input__wrapper {
+  border-radius: 8px;
+}
+
+// 页面切换动画
+.fade-transform-enter-active,
+.fade-transform-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-transform-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.fade-transform-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+// 深色模式基础覆盖：仅当 html 存在 dark 类时生效
+html.dark {
+  body {
+    background-color: #141414;
+    color: #e0e0e0;
+  }
+
+  .portal-layout {
+    background-color: #0f0f0f;
+  }
+
+  .portal-footer {
+    color: #8c8c8c;
+    border-top-color: #2c2c2c;
+  }
+}

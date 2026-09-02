@@ -1,0 +1,68 @@
+# AI Agent Server - 测试环境配置
+server:
+  port: 9003
+
+spring:
+  application:
+    name: ai-agent-server
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/auth_platform?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${AI_AGENT_TEST_DB_PASSWORD:test}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema-ai-agent.sql
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+
+# 测试时关闭JWT认证
+auth:
+  resource:
+    enabled: false
+
+# AI配置(测试时可关闭LLM调用来避免API费用)
+ai-agent:
+  llm:
+#    base-url: https://api.openai.com/v1
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    api-key: ${AI_AGENT_TEST_LLM_API_KEY:}
+    model: gpt-3.5-turbo
+    max-tokens: 2048
+    temperature: 0.7
+    timeout: 60
+  embedding:
+    provider: zhipu
+    batch-size: 100
+  embedding-providers:
+    ollama:
+      base-url: http://localhost:11434/v1
+      api-key: ollama
+      model: nomic-embed-text
+      dimensions: 768
+    zhipu:
+      base-url: https://open.bigmodel.cn/api/paas/v4
+      api-key: ${AI_AGENT_TEST_EMBEDDING_API_KEY:}
+      model: embedding-2
+      dimensions: 1024
+  vector:
+    type: MEMORY
+    top-k: 5
+  local-search:
+    index-path: ./data/test-lucene-index
+  web-search:
+    provider: BRAVE
+    api-key: ${WEB_SEARCH_API_KEY:}
+  analysis:
+    enabled: false
+    cron: "0 0/30 * * * ?"
+
+logging:
+  level:
+    com.liang: INFO
+    com.liang.xz.aiagent: DEBUG
