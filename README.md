@@ -230,7 +230,10 @@ http://localhost:10909/doc.html
 | 页面 | 截图 |
 | --- | --- |
 | 登录页 | ![登录页](frontend-web/screenshot-login.png) |
-| 主界面 | ![主界面](frontend-web/screenshot.png) |
+| 主界面 | <img width="2549" height="1403" alt="image" src="https://github.com/user-attachments/assets/308a4ce0-f67a-4f03-bc78-88b4911947dc" />
+| 客户端管理 | <img width="2520" height="1449" alt="image" src="https://github.com/user-attachments/assets/f2f0dfbe-5f67-42a4-98fb-b80bfb5c6fef" />
+| 审批流程| <img width="2538" height="1419" alt="image" src="https://github.com/user-attachments/assets/330fc555-585a-4f20-aaab-3f45727a0f74" />
+| 知识库管理| <img width="2549" height="1403" alt="image" src="https://github.com/user-attachments/assets/beb1c181-a175-4776-8552-678137a416d8" />
 | 路由配置对话框 | ![路由配置](frontend-web/screenshot-routing-dialog.png) |
 | AI 配置提供方 | ![AI 配置](frontend-web/screenshot-ai-config-provider.png) |
 
