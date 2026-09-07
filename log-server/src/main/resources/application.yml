@@ -1,0 +1,63 @@
+server:
+  port: 9009
+spring:
+  application:
+    name: log-server
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yml
+      - optional:nacos:redis.yml
+      - optional:nacos:datasource.yml
+      - optional:nacos:common-config.yml
+      - optional:nacos:resource-server.yml
+  # ======================== Nacos 注册中心/配置中心 ========================
+  cloud:
+    nacos:
+      discovery:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        register-enabled: true
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        file-extension: yml
+        refresh-enabled: true
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+
+# ======================== Knife4j API文档 ========================
+# 安全提示：日志接口尤其敏感，生产环境需通过 API_DOCS_ENABLED=false 关闭
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+  group-configs:
+    - group: '日志收集'
+      paths-to-match: /api/logs/collect/**
+    - group: '日志查询'
+      paths-to-match: /api/logs/**
+    - group: 'AI日志分析'
+      paths-to-match: /api/logs/analysis/**
+
+knife4j:
+  enable: ${API_DOCS_ENABLED:true}
+  setting:
+    language: zh-CN
+    enable-search: true
+    enable-footer-custom: true
+    footer-custom-content: Apache License 2.0 | Copyright © 2024 auth-platform
+
+# ======================== 日志本地配置 ========================
+logging:
+  level:
+    org.springframework.jdbc: INFO
+
+# log-server 自身不通过 LogReportClient 上报日志，避免自循环
+log:
+  client:
+    enabled: false

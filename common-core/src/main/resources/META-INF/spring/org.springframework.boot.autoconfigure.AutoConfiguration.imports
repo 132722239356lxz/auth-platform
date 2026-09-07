@@ -1,0 +1,7 @@
+com.liang.xz.common.core.CommonCoreComponentScanConfiguration
+com.liang.xz.common.core.trace.TraceAutoConfiguration
+com.liang.xz.common.core.async.AsyncTaskAutoConfiguration
+com.liang.xz.common.core.redis.RedisConfig
+com.liang.xz.common.core.datasource.DynamicDataSourceAutoConfiguration
+com.liang.xz.common.core.log.LogClientAutoConfiguration
+com.liang.xz.common.core.crypto.CryptoAutoConfiguration

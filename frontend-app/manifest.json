@@ -1,0 +1,47 @@
+{
+  "name": "auth-platform-app",
+  "appid": "__UNI__AUTHPF",
+  "description": "统一授权中台移动端",
+  "versionName": "1.0.0",
+  "versionCode": 100,
+  "transformPx": false,
+  "app-plus": {
+    "usingComponents": true,
+    "nvueStyleCompiler": "uni-app",
+    "compilerVersion": 3,
+    "splashscreen": {
+      "alwaysShowBeforeRender": true,
+      "waiting": true,
+      "autoclose": true,
+      "delay": 0
+    },
+    "modules": {},
+    "distribute": {
+      "android": { "permissions": ["<uses-permission android:name=\"android.permission.INTERNET\"/>"] },
+      "ios": {},
+      "sdkConfigs": {}
+    }
+  },
+  "quickapp": {},
+  "mp-weixin": {
+    "appid": "",
+    "setting": { "urlCheck": false, "es6": true, "postcss": true, "minified": true },
+    "usingComponents": true
+  },
+  "h5": {
+    "title": "统一授权中台",
+    "router": { "mode": "hash", "base": "./" },
+    "devServer": {
+      "port": 5174,
+      "proxy": {
+        "/auth-server": { "target": "http://127.0.0.1:8080", "changeOrigin": true },
+        "/system-server": { "target": "http://127.0.0.1:8080", "changeOrigin": true },
+        "/auth-flow": { "target": "http://127.0.0.1:8080", "changeOrigin": true },
+        "/auth-message": { "target": "http://127.0.0.1:8080", "changeOrigin": true },
+        "/ai-agent-server": { "target": "http://127.0.0.1:8080", "changeOrigin": true },
+        "/log-server": { "target": "http://127.0.0.1:8080", "changeOrigin": true }
+      }
+    }
+  },
+  "vueVersion": "3"
+}

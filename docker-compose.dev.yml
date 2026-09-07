@@ -1,0 +1,374 @@
+# =============================================================================
+# auth-platform — 开发环境编排 (dev)
+# =============================================================================
+# 用途：本地开发 / dev 服务器一键拉起「基础设施 + 全部微服务」
+#
+# 启动：
+#   docker compose -f docker-compose.dev.yml up -d
+# 仅启动基础设施：
+#   docker compose -f docker-compose.dev.yml up -d mysql redis nacos rabbitmq
+# 查看日志 / 停止：
+#   docker compose -f docker-compose.dev.yml logs -f gateway
+#   docker compose -f docker-compose.dev.yml down
+#
+# 说明：
+#   - 敏感凭证一律从 .env 读取，请先在仓库根目录执行：cp .env.example .env
+#   - dev 环境为方便调试对外暴露了 MySQL/Redis/RabbitMQ 端口，生产请勿如此（见 docker-compose.prod.yml）
+# =============================================================================
+
+x-common-env: &common-env
+  TZ: Asia/Shanghai
+  NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+  SPRING_PROFILES_ACTIVE: dev
+  API_DOCS_ENABLED: "true"
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+networks:
+  auth-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  nacos-data:
+
+services:
+  # ==================== 基础设施层 ====================
+
+  mysql:
+    image: mysql:8.0
+    container_name: dev-mysql
+    hostname: mysql
+    networks: [auth-net]
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+      TZ: Asia/Shanghai
+    # 说明：业务表结构由各微服务启动时通过 spring.sql.init 自动初始化
+    #      （见各模块 application.yml 的 schema-locations: classpath:db/schema.sql），
+    #      故此处不挂载额外初始化脚本，避免与代码内的建表逻辑重复或冲突。
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=500
+      - --wait_timeout=600
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: dev-redis
+    hostname: redis
+    networks: [auth-net]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: dev-nacos
+    hostname: nacos
+    networks: [auth-net]
+    ports:
+      - "${NACOS_PORT:-8848}:8848"
+      - "9848:9848"
+    environment:
+      MODE: standalone
+      # 安全：鉴权必须开启，且密钥必须替换为随机值（Nacos 默认密钥可伪造身份）
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-serverIdentity}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:?请在 .env 中设置 NACOS_AUTH_IDENTITY_VALUE}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:?请在 .env 中设置 NACOS_AUTH_TOKEN（≥32位随机字符串）}
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+    # 说明：dev 环境 Nacos 采用 standalone 内置存储（Derby），开箱即用。
+    #      生产环境如需配置持久化，请改为外置 MySQL，并先手动导入 Nacos 官方 nacos-mysql.sql。
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    logging: *default-logging
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: dev-rabbitmq
+    hostname: rabbitmq
+    networks: [auth-net]
+    ports:
+      - "5672:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?请在 .env 中设置 RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?请在 .env 中设置 RABBITMQ_PASS}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    logging: *default-logging
+
+  # ==================== 应用服务层 ====================
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: gateway/target/gateway.jar
+        SERVER_PORT: "8080"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/gateway:${APP_VERSION:-dev}
+    container_name: dev-gateway
+    hostname: gateway
+    networks: [auth-net]
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "8080"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+    depends_on:
+      nacos: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    logging: *default-logging
+
+  auth-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: auth-server/target/auth-server.jar
+        SERVER_PORT: "9000"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/auth-server:${APP_VERSION:-dev}
+    container_name: dev-auth-server
+    hostname: auth-server
+    networks: [auth-net]
+    ports:
+      - "9000:9000"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9000"
+      # 门户客户端密钥：务必在 .env 中设置为高强度随机值
+      PORTAL_CLIENT_ID: ${PORTAL_CLIENT_ID:-admin-web}
+      PORTAL_CLIENT_SECRET: ${PORTAL_CLIENT_SECRET:?请在 .env 中设置 PORTAL_CLIENT_SECRET}
+      PORTAL_TOKEN_ENDPOINT: ${PORTAL_TOKEN_ENDPOINT:-http://gateway:8080/auth-server/oauth2/token}
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *default-logging
+
+  system-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: system-server/target/system-server.jar
+        SERVER_PORT: "9001"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/system-server:${APP_VERSION:-dev}
+    container_name: dev-system-server
+    hostname: system-server
+    networks: [auth-net]
+    ports:
+      - "9001:9001"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9001"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *default-logging
+
+  auth-flow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: auth-flow/target/auth-flow.jar
+        SERVER_PORT: "9011"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/auth-flow:${APP_VERSION:-dev}
+    container_name: dev-auth-flow
+    hostname: auth-flow
+    networks: [auth-net]
+    ports:
+      - "9011:9011"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9011"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *default-logging
+
+  auth-message:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: auth-message/target/auth-message.jar
+        SERVER_PORT: "9002"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/auth-message:${APP_VERSION:-dev}
+    container_name: dev-auth-message
+    hostname: auth-message
+    networks: [auth-net]
+    ports:
+      - "9002:9002"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9002"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *default-logging
+
+  ai-agent-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: ai-agent-server/target/ai-agent-server.jar
+        SERVER_PORT: "9003"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/ai-agent-server:${APP_VERSION:-dev}
+    container_name: dev-ai-agent-server
+    hostname: ai-agent-server
+    networks: [auth-net]
+    ports:
+      - "9003:9003"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9003"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *default-logging
+
+  log-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: log-server/target/log-server.jar
+        SERVER_PORT: "9009"
+        APP_PROFILE: dev
+    image: ${IMAGE_REGISTRY:-auth-platform}/log-server:${APP_VERSION:-dev}
+    container_name: dev-log-server
+    hostname: log-server
+    networks: [auth-net]
+    ports:
+      - "9009:9009"
+    environment:
+      <<: *common-env
+      SERVER_PORT: "9009"
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ==================== 前端层 ====================
+
+  # 管理端 Web（Vue3 + Vite，容器内 Nginx 托管，API 由 Nginx 反向代理到网关）
+  frontend-web:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile
+    image: ${IMAGE_REGISTRY:-auth-platform}/frontend-web:${APP_VERSION:-dev}
+    container_name: dev-frontend-web
+    hostname: frontend-web
+    networks: [auth-net]
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      gateway: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+
+  # 移动端 H5（UniApp）
+  # 注意：当前项目为 HBuilderX 布局（manifest.json / pages.json 位于根目录，无 src/ 目录），
+  #       而 `uni build` 是 CLI 工具，强制读取 src/manifest.json，故 H5 构建会失败。
+  #       该问题在本机直接执行 npm run build:h5 时同样存在，需先按 CLI 标准布局调整目录
+  #       （将 manifest.json、pages.json、main.js、App.vue、pages/、static/ 移入 src/）。
+  #       因此默认不启动本服务，待目录结构调整后再用 --profile mobile 启用：
+  #         docker compose -f docker-compose.dev.yml --profile mobile up -d frontend-app
+  frontend-app:
+    profiles: ["mobile"]
+    build:
+      context: ./frontend-app
+      dockerfile: Dockerfile
+    image: ${IMAGE_REGISTRY:-auth-platform}/frontend-app:${APP_VERSION:-dev}
+    container_name: dev-frontend-app
+    hostname: frontend-app
+    networks: [auth-net]
+    ports:
+      - "${APP_PORT:-8081}:80"
+    depends_on:
+      gateway: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging

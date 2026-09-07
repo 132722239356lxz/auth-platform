@@ -1,0 +1,64 @@
+server:
+  port: 9002
+
+
+spring:
+  application:
+    name: auth-message
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yml
+      - optional:nacos:redis.yml
+      - optional:nacos:auth-security.yml
+      - optional:nacos:datasource.yml
+      - optional:nacos:rabbitmq.yml
+      - optional:nacos:common-config.yml
+      - optional:nacos:resource-server.yml
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema-message.sql
+  cloud:
+    nacos:
+      discovery:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        register-enabled: true
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        file-extension: yml
+        refresh-enabled: true
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+
+# ======================== Knife4j API文档 ========================
+# 安全提示：生产环境需通过 API_DOCS_ENABLED=false 关闭，避免接口签名泄露
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+  group-configs:
+    - group: '消息管理'
+      paths-to-match: /api/message/**
+    - group: '门户消息'
+      paths-to-match: /api/portal/message/**
+    - group: '子系统异常'
+      paths-to-match: /api/subsystem/incident/**
+
+knife4j:
+  enable: ${API_DOCS_ENABLED:true}
+  setting:
+    language: zh-CN
+    enable-search: true
+
+# 统一日志上报到 log-server
+log:
+  client:
+    enabled: true
+    server-url: http://log-server

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/ai-agent-server/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-server/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/auth-flow/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/auth-flow/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/auth-message/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/auth-message/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/auth-server/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/auth-server/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/common-core/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/common-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/gateway/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/gateway/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/knife4j-aggregation/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/knife4j-aggregation/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/log-server/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/log-server/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/resource-server-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/resource-server-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/subsystem-sdk/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/subsystem-sdk/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/system-server/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/system-server/src/main/resources" charset="UTF-8" />
+  </component>
+</project>

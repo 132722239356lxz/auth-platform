@@ -1,0 +1,77 @@
+#!/bin/bash
+# =============================================================================
+# Git Pre-Push Hook — CI/CD 发布前检查
+# =============================================================================
+# 在推送代码前执行安全检查, 确保代码质量
+# 安装: cp .githooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+# =============================================================================
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+PUSH_TARGET="origin/$BRANCH"
+
+echo ""
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║  🔍 Pre-Push 安全检查                                 ║"
+echo "╠══════════════════════════════════════════════════════╣"
+echo "║  分支: $BRANCH → $PUSH_TARGET"
+echo "╚══════════════════════════════════════════════════════╝"
+echo ""
+
+# 1. 安全检查
+echo "  [1/5] 运行 guard-build.sh 安全扫描..."
+GUARD_BUILD="$ROOT/.codebuddy/hooks/guard-build.sh"
+if [ -f "$GUARD_BUILD" ]; then
+  if bash "$GUARD_BUILD" 2>&1 | grep -q "严重: [1-9]"; then
+    echo "  ❌ 发现严重安全风险, 推送已阻止!"
+    echo "  请修复后重试。"
+    exit 1
+  fi
+  echo "  ✅ 安全检查通过"
+else
+  echo "  ⚠️  guard-build.sh 不存在, 跳过"
+fi
+
+# 2. 编译检查 (快速模式)
+echo "  [2/5] Maven 编译检查..."
+if [ -f "$ROOT/pom.xml" ]; then
+  mvn -q -T1C compile -DskipTests 2>&1 | tail -3
+  if [ ${PIPESTATUS[0]} -ne 0 ]; then
+    echo "  ❌ 编译失败, 推送已阻止!"
+    exit 1
+  fi
+  echo "  ✅ 编译通过"
+fi
+
+# 3. 禁止推送的敏感文件检查
+echo "  [3/5] 敏感文件检查..."
+SENSITIVE=$(git diff --cached --name-only "$PUSH_TARGET" 2>/dev/null | grep -E '\.env$|\.pem$|id_rsa|credentials|secret.*\.yml' || true)
+if [ -n "$SENSITIVE" ]; then
+  echo "  ❌ 发现敏感文件变更, 禁止推送!"
+  echo "  文件: $SENSITIVE"
+  echo "  请将以下文件加入 .gitignore:"
+  echo "$SENSITIVE"
+  exit 1
+fi
+echo "  ✅ 敏感文件检查通过"
+
+# 4. 提交信息格式检查
+echo "  [4/5] 提交信息检查..."
+COMMIT_MSGS=$(git log "$PUSH_TARGET..HEAD" --format="%s" 2>/dev/null || echo "N/A")
+echo "  待推送提交数: $(echo "$COMMIT_MSGS" | wc -l)"
+
+# 5. 分支保护 (禁止直接推送到 main)
+echo "  [5/5] 分支保护检查..."
+if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+  echo "  ❌ 禁止直接推送到 $BRANCH 分支!"
+  echo "  请通过 Pull Request 合并。"
+  exit 1
+fi
+echo "  ✅ 分支检查通过"
+
+echo ""
+echo "  ✅ Pre-Push 所有检查通过，允许推送!"
+echo ""
+
+exit 0

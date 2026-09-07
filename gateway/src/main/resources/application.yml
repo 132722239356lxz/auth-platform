@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yml
+      - optional:nacos:redis.yml
+      - optional:nacos:resilience4j.yml
+      - optional:nacos:auth-security.yml
+      - optional:nacos:resource-server.yml
+  cloud:
+    nacos:
+      discovery:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        register-enabled: true
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+      config:
+        server-addr: @nacos.server-addr@
+        namespace: @nacos.namespace@
+        group: @nacos.group@
+        file-extension: yml
+        refresh-enabled: true
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+
+
+# Resilience4j → 由 Nacos resilience4j.yml 提供
+
+# ======================== 日志 ========================
+logging:
+  level:
+    com.liang: DEBUG
+    org.springframework.cloud.gateway: INFO
+    io.github.resilience4j: DEBUG

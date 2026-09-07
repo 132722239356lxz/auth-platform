@@ -1,0 +1,330 @@
+name: CI/CD Pipeline
+
+# =============================================================================
+# Auth Platform — 持续集成与部署
+# =============================================================================
+# 触发条件:
+#   push:       推送到 main/develop 分支时触发完整构建
+#   pull_request: PR 到 main 时触发测试 + 安全检查
+#   workflow_dispatch: 手动触发 (支持选择环境)
+#   schedule:    每工作日凌晨 3:00 自动安全检查
+# =============================================================================
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
+      - 'data/**'
+
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+        default: dev
+      deploy:
+        description: '是否部署到目标环境'
+        type: boolean
+        default: false
+      skip_tests:
+        description: '跳过测试'
+        type: boolean
+        default: false
+
+  schedule:
+    - cron: '0 3 * * 1-5'  # 工作日凌晨 3:00
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_CACHE: ~/.m2/repository
+  DOCKER_REGISTRY: ghcr.io
+
+jobs:
+  # =============================================================================
+  # Job 1: 安全检查 (并行, 不依赖构建)
+  # =============================================================================
+  security-scan:
+    name: 🔒 安全检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 运行 guard-build.sh 安全扫描
+        id: security
+        run: |
+          if [ -f .codebuddy/hooks/guard-build.sh ]; then
+            bash .codebuddy/hooks/guard-build.sh 2>&1 | tee scan-report.txt
+            RESULT=${PIPESTATUS[0]}
+
+            # 提取严重/高危数量
+            CRITICAL=$(grep -oP '严重:\s*\K\d+' scan-report.txt || echo 0)
+            HIGH=$(grep -oP '高危:\s*\K\d+' scan-report.txt || echo 0)
+
+            echo "CRITICAL=$CRITICAL" >> $GITHUB_OUTPUT
+            echo "HIGH=$HIGH" >> $GITHUB_OUTPUT
+
+            if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+              echo "❌ 安全扫描发现严重/高危问题，构建阻止。"
+              exit 1
+            fi
+            echo "✅ 安全扫描通过"
+          else
+            echo "⚠️ guard-build.sh 不存在，跳过安全扫描"
+          fi
+
+      - name: 上传扫描报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report
+          path: scan-report.txt
+          retention-days: 30
+
+  # =============================================================================
+  # Job 2: 构建 + 测试 (并行，仅主线 push/手动触发)
+  # =============================================================================
+  build-and-test:
+    name: 🔧 后端构建与测试
+    runs-on: ubuntu-latest
+    needs: security-scan
+    # PR 和 schedule 不执行完整构建
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [gateway, auth-server, system-server, auth-flow, auth-message, ai-agent-server, log-server, knife4j-aggregation]
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 缓存 Maven 依赖
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MAVEN_CACHE }}
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: 构建 ${{ matrix.module }}
+        env:
+          SKIP_TESTS: ${{ github.event.inputs.skip_tests || 'false' }}
+        run: |
+          TEST_FLAG=""
+          if [ "$SKIP_TESTS" = "true" ]; then
+            TEST_FLAG="-DskipTests"
+          fi
+          mvn clean package $TEST_FLAG -B -q -pl ${{ matrix.module }} -am
+
+      - name: 上传 JAR 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/*.jar
+          retention-days: 7
+
+  # =============================================================================
+  # Job 3: 前端构建
+  # =============================================================================
+  build-frontend:
+    name: 🎨 前端构建
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        frontend:
+          - name: frontend-web
+            dir: frontend-web
+            build_cmd: npm run build
+          - name: frontend-app-h5
+            dir: frontend-app
+            build_cmd: npm run build:h5
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.frontend.dir }}/package-lock.json
+
+      - name: 安装依赖
+        working-directory: ${{ matrix.frontend.dir }}
+        run: npm ci
+
+      - name: 构建 ${{ matrix.frontend.name }}
+        working-directory: ${{ matrix.frontend.dir }}
+        run: ${{ matrix.frontend.build_cmd }}
+
+      - name: 上传前端产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.frontend.name }}
+          path: ${{ matrix.frontend.dir }}/dist/
+          retention-days: 7
+
+  # =============================================================================
+  # Job 4: Docker 镜像构建 & 推送 (仅 main 分支 push)
+  # =============================================================================
+  docker-build-push:
+    name: 🐳 Docker 构建与推送
+    runs-on: ubuntu-latest
+    needs: [build-and-test, build-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - gateway
+          - auth-server
+          - system-server
+          - auth-flow
+          - auth-message
+          - ai-agent-server
+          - log-server
+          - knife4j-aggregation
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 下载 JAR 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: jar-${{ matrix.service }}
+          path: ${{ matrix.service }}/target/
+
+      - name: 登录 GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            JAR_FILE=${{ matrix.service }}/target/${{ matrix.service }}.jar
+            APP_PROFILE=prod
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/auth-platform-${{ matrix.service }}:${{ github.sha }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/auth-platform-${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # =============================================================================
+  # Job 5: 部署 (仅手动触发且选择部署)
+  # =============================================================================
+  deploy:
+    name: 🚀 部署到 ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true'
+    environment:
+      name: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 部署到服务器
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          APP_PROFILE: ${{ github.event.inputs.environment || 'dev' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "部署到 ${DEPLOY_HOST} (${APP_PROFILE} 环境)..."
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            docker-compose.yml scripts/deploy.sh "${DEPLOY_USER}@${DEPLOY_HOST}:~/auth-platform/"
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd ~/auth-platform && bash scripts/deploy.sh --env ${APP_PROFILE}"
+
+      - name: 部署结果通知
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ 部署成功 — ${{ github.event.inputs.environment || 'dev' }} 环境"
+          else
+            echo "❌ 部署失败 — 请检查流水线日志"
+          fi
+
+  # =============================================================================
+  # Job 6: PR 检查 (仅检查，不部署)
+  # =============================================================================
+  pr-check:
+    name: 📋 PR 代码检查
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 编译检查 (全量)
+        run: mvn compile -B -q
+
+      - name: 运行测试
+        run: mvn test -B -q
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/target/surefire-reports/*.txt"
+          retention-days: 7

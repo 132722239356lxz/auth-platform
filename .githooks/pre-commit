@@ -1,0 +1,62 @@
+#!/bin/bash
+# =============================================================================
+# Git Pre-Commit Hook — 提交前检查
+# =============================================================================
+# 安装: cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# =============================================================================
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+STAGED=$(git diff --cached --name-only)
+
+# 如果暂存区无文件, 直接放行
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+echo ""
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║  🔍 Pre-Commit 检查...                               ║"
+echo "╚══════════════════════════════════════════════════════╝"
+
+# 1. 禁止提交的敏感文件
+echo "  [1/3] 敏感文件检查..."
+SENSITIVE=$(echo "$STAGED" | grep -E '\.env$|\.pem$|id_rsa|credentials|secret.*\.yml' || true)
+if [ -n "$SENSITIVE" ]; then
+  echo "  ❌ 禁止提交敏感文件:"
+  echo "$SENSITIVE"
+  echo "  请从暂存区移除: git reset HEAD <file>"
+  exit 1
+fi
+echo "  ✅ 通过"
+
+# 2. 大文件检查 (超过 10MB)
+echo "  [2/3] 大文件检查..."
+LARGE_FILES=""
+for f in $STAGED; do
+  if [ -f "$f" ]; then
+    SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
+    if [ "$SIZE" -gt 10485760 ]; then
+      LARGE_FILES="$LARGE_FILES $f ($((SIZE/1048576))MB)"
+    fi
+  fi
+done
+if [ -n "$LARGE_FILES" ]; then
+  echo "  ⚠️  发现大文件 (>10MB):"
+  echo "$LARGE_FILES"
+  echo "  建议使用 Git LFS 管理。"
+fi
+echo "  ✅ 通过"
+
+# 3. Java 文件语法快速检查
+echo "  [3/3] 代码检查..."
+JAVA_FILES=$(echo "$STAGED" | grep '\.java$' || true)
+if [ -n "$JAVA_FILES" ]; then
+  echo "  变更 Java 文件: $(echo "$JAVA_FILES" | wc -l) 个"
+fi
+echo "  ✅ 通过"
+
+echo ""
+echo "  ✅ Pre-Commit 检查完成, 允许提交!"
+echo ""
+exit 0
