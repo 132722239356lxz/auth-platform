@@ -24,7 +24,7 @@ spring:
         namespace: @nacos.namespace@
         group: @nacos.group@
         register-enabled: true
-        username: ${NACOS_USERNAME:@nacos.username@}
+        username: ${NACOS_USERNAME:nacos}
         password: ${NACOS_PASSWORD:nacos}
       config:
         server-addr: @nacos.server-addr@
@@ -32,7 +32,7 @@ spring:
         group: @nacos.group@
         file-extension: yml
         refresh-enabled: true
-        username: ${NACOS_USERNAME:@nacos.username@}
+        username: ${NACOS_USERNAME:nacos}
         password: ${NACOS_PASSWORD:nacos}
 
 

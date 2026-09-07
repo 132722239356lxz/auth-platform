@@ -38,7 +38,7 @@ public class TokenBlacklistService {
      * 判断指定 jti 是否已被吊销。
      */
     public Mono<Boolean> isRevoked(String jti) {
-        if (jti == null || jti.isBlank()) {
+        if (jti == null || jti.trim().isEmpty()) {
             return Mono.just(false);
         }
         return reactiveStringRedisTemplate.hasKey(BLACKLIST_KEY_PREFIX + jti)
@@ -53,11 +53,14 @@ public class TokenBlacklistService {
      * 吊销指定 Token（供内部管理接口使用，如强制下线）。
      */
     public Mono<Boolean> revoke(String jti, Duration remainingTtl) {
-        if (jti == null || jti.isBlank()) {
+        if (jti == null || jti.trim().isEmpty()) {
             return Mono.just(false);
         }
+        String key = BLACKLIST_KEY_PREFIX + jti;
         return reactiveStringRedisTemplate.opsForValue()
-                .set(BLACKLIST_KEY_PREFIX + jti, "1", remainingTtl)
+                .set(key, "1")
+                .flatMap(ok -> reactiveStringRedisTemplate.expire(
+                        key, Duration.ofSeconds(remainingTtl.getSeconds())))
                 .onErrorResume(e -> {
                     log.error("[Gateway] 吊销Token失败: jti={}, reason={}", jti, e.getMessage());
                     return Mono.just(false);

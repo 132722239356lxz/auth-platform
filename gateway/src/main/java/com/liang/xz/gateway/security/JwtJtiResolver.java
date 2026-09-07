@@ -3,6 +3,7 @@ package com.liang.xz.gateway.security;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.logging.log4j.util.Strings;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -36,7 +37,7 @@ public final class JwtJtiResolver {
      * @return jti；解析失败或不存在返回 null
      */
     public static String resolveJti(String token) {
-        if (token == null || token.isBlank()) {
+        if (token == null || Strings.isBlank(token)) {
             return null;
         }
         try {
