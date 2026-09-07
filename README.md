@@ -2,9 +2,13 @@
 
 > 自研统一授权中台：基于 **Spring Authorization Server** 的 OAuth2 认证授权平台，叠加**自定义工作流审批**、**分布式消息广播**、**AI 智能体（RAG）** 与**统一日志分析**，并提供 Web / 移动端管理界面与子系统接入 SDK。
 
-<!-- 徽章（可选，发布前替换为真实地址）
-![Build](图片地址待粘贴)
-![License](图片地址待粘贴)
+![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-6DB33F?logo=springboot&logoColor=white)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
+
+<!-- 发布到 GitHub 后，取消下面两行注释并把 owner/repo 换成你的仓库地址
+![Build](https://img.shields.io/github/actions/workflow/status/owner/repo/ci.yml?branch=main)
+![Stars](https://img.shields.io/github/stars/owner/repo?style=social)
 -->
 
 ---
@@ -37,7 +41,88 @@
 
 ## 🏗 系统架构
 
-![系统架构图](图片地址待粘贴)
+> 下方为可编辑的 Mermaid 架构图（GitHub 原生渲染，无需外链图片）。**图例：实线 = 同步 HTTP 调用，虚线 = 异步 MQ / 事件。** 如需替换为自己的图片，把整个 ```mermaid 代码块换成 `![系统架构图](图片地址)` 即可。
+
+```mermaid
+flowchart TB
+    subgraph Client["客户端层"]
+        Web["Web 管理端 (Vue3)"]
+        App["移动端 (UniApp)"]
+        Sub["业务子系统"]
+        Third["第三方应用"]
+    end
+
+    subgraph GW["接入网关层 · Spring Cloud Gateway :8080"]
+        GF["AuthGlobalFilter<br/>Token 校验 / 限流 / 路由转发"]
+    end
+
+    subgraph Core["中台核心微服务"]
+        AS["auth-server :9000<br/>OAuth2 令牌签发/刷新/吊销"]
+        SS["system-server :9001<br/>RBAC / 审计 / 字典"]
+        AF["auth-flow :9011<br/>工作流审批"]
+        AM["auth-message :9002<br/>消息广播"]
+        AI["ai-agent-server :9003<br/>RAG 智能体"]
+        LS["log-server :9009<br/>日志分析"]
+    end
+
+    subgraph Common["公共能力"]
+        CC["common-core"]
+        RS["resource-server-starter"]
+        SDK["subsystem-sdk"]
+    end
+
+    subgraph Infra["基础设施层"]
+        NACOS["Nacos 2.3.2<br/>注册 / 配置"]
+        MYSQL[("MySQL 8")]
+        REDIS[("Redis")]
+        MQ["RabbitMQ / RocketMQ"]
+        MINIO[("MinIO")]
+        VEC[("向量库 FAISS/Milvus")]
+        SENT["Sentinel"]
+    end
+
+    KN["knife4j-aggregation :10909<br/>API 文档聚合"]
+
+    Client --> GF
+    GF -->|/auth-server/**| AS
+    GF -->|/system-server/**| SS
+    GF -->|/auth-flow/**| AF
+    GF -->|/auth-message/**| AM
+    GF -->|/ai-agent-server/**| AI
+    GF -->|/log-server/**| LS
+
+    Core --> RS
+    Core --> CC
+    Sub --> SDK
+    SDK --> MQ
+
+    AS --> NACOS
+    SS --> NACOS
+    AF --> NACOS
+    AM --> NACOS
+    AI --> NACOS
+    LS --> NACOS
+
+    AS --> MYSQL
+    SS --> MYSQL
+    LS --> MYSQL
+    AF --> MYSQL
+    Core --> REDIS
+    AM --> MQ
+    AI --> VEC
+    AI --> MINIO
+    Core --> SENT
+
+    KN -.->|聚合文档| Core
+
+    %% 跨服务调用链路（实线=同步HTTP，虚线=异步MQ/事件）
+    AS -.->|JWKS 验签| RS
+    AF -->|审批通过→开通/驳回权限| SS
+    AM -.->|MQ 广播事件| SDK
+    SDK -.->|MQ 上报消息| AM
+    SS -.->|日志采集| LS
+    AI -.->|业务数据检索| SS
+```
 
 ```
 ┌─────────────────────────────────────────────────────────────
